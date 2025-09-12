@@ -10,6 +10,10 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@openzeppelin/contracts": "^4.9.6",
+    "dotenv": "^17.2.2",
     "hardhat": "^2.26.3"
+  },
+  "dependencies": {
+    "@opensea/seaport-js": "^4.0.5"
   }
 }
