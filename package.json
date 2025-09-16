@@ -1,6 +1,7 @@
 {
   "name": "seaport-zone-poc",
   "version": "1.0.0",
+  "type": "commonjs",
   "private": true,
   "scripts": {
     "clean": "rm -rf cache artifacts",

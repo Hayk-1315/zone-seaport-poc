@@ -1,109 +1,113 @@
-# Zone + Seaport PoC
+MarketCreator PoC – WPERC1155 + Seaport (Sepolia)
 
-This PoC shows in a **simple way** how a secondary market trade would work using **Seaport**, a custom **Zone**, and our ERC‑1155 contract.
+This repository contains several experiments related to the MarketCreator prototype:
 
----
+PoC with Zone (first attempt to validate secondary market rules).
 
-## 🎯 Goal
+PoC local without real Seaport (orderbook logic, ratios, and WP).
 
-Prove that the **Zone** can:
+Final PoC in seaport-demo/ folder → full integration with real Seaport on Sepolia, including minting, listing, signing orders, and fulfilling.
 
-1. Check that the `tokenId` belongs to our ERC‑1155 market contract.
-2. Make sure the VM (virtual market) is marked as `tradable`.
-3. Check that required fee recipients appear in `consideration[]`.
+The most important part is seaport-demo/. This folder demonstrates the complete pipeline we want to validate.
 
----
+Requirements
 
-## 🧩 Components
+Node.js + Hardhat.
 
-- **MockERC1155Market**: ERC‑1155 contract that simulates a market with `vmId`s and a flag to allow trading.
-- **ZoneMinimal**: contract that validates an order before Seaport executes it.
-- **MockSeaport**: simplified Seaport that calls the Zone for validation, then transfers tokens.
-- **MockUSDC**: ERC‑20 stablecoin mock (not yet used in flows but ready if needed).
-- **Tests (`zone-poc.test.js`)**: verify success and failure cases.
+An account with some ETH on Sepolia.
 
----
+Environment variables in .env:
 
-## 🔄 Flow
+SEPOLIA_RPC_URL=...
+SELLER_PK=...
+BUYER_PK=...
+FUND_FROM_PK=...   # optional, to fund buyer with USDC
+WP_ADDR=...        # deployed WPERC1155 address
+USDC_ADDR=...      # deployed MockUSDC address
+SEAPORT_ADDR=0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC  # official contract on Sepolia
 
-1. Seller (offerer) holds a `tokenId` in the `MockERC1155Market`.
-2. The related `vmId` is marked as `tradable`.
-3. An **Order** is created with:
-   - Who sells (`offerer`)
-   - What is sold (`token`, `tokenId`, `amount`)
-   - Market (`vmId`)
-   - Zone that validates (`ZoneMinimal`)
-   - Required fees (`consideration[]`)
-4. Buyer calls `MockSeaport.fulfillOrder`.
-5. Seaport asks the Zone to validate the order.
-6. If validation passes:
-   - ERC‑1155 tokens move from seller to buyer.
-   - Event `OrderFulfilled` is emitted.
-7. If validation fails, the transaction reverts with a clear reason (e.g. `VM not tradable`, `missing required recipient`).
+Step-by-step flow
+Deploy
+npx hardhat run --network sepolia scripts/deploy-sepolia.js
 
----
 
-## 📂 Project structure
+Deploys WPERC1155 and MockUSDC.
 
-```
-contracts/
-  mocks/
-    MockUSDC.sol
-    MockERC1155Market.sol
-    MockSeaport.sol
-  ZoneMinimal.sol
+Configures a vmId with tOpen, tClose, betaOpen, and outcomes.
 
-test/
-  zone-poc.test.js
+Saves addresses in deployments/sepolia.json.
 
-scripts/
-  deploy.js
+Mint positions (seller)
+npx hardhat run --network sepolia scripts/sepolia-mint-positions.js
 
-hardhat.config.js
-package.json
-.gitignore
-```
 
----
+Mints multiple positions with different timeslot.
 
-## 🚀 Run it
+Prints tokenId, amount, and β of each position to console.
 
-1. Install dependencies:
+Scan holdings
+npx hardhat run --network sepolia scripts/sepolia-scan-holdings.js
 
-```bash
-npm install
-```
 
-2. Compile:
+Detects seller balances.
 
-```bash
-npx hardhat compile
-```
+Generates data/listings.config.js with tokenId, amount, and a placeholder askUSDC_6dec.
 
-3. Run tests:
+Edit prices
 
-```bash
-npx hardhat test
-```
+Open data/listings.config.js.
 
-4. Deploy locally:
+Manually adjust askUSDC_6dec (price in USDC with 6 decimals).
 
-```bash
-npx hardhat run scripts/deploy.js --network localhost
-```
+Preview ratios
+npx hardhat run --network sepolia scripts/preview-ratios.js
 
----
 
-## 📌 Notes
+Computes WP on-chain for each position.
 
-- The code is **mocked**: this is not a full Seaport implementation, only a clear demo.
-- `scripts/deploy.js` will be included to deploy contracts and run a simple demo flow on localhost.
-- `ZoneMinimal` can be extended (e.g., enforce minimum protocol fee %).
+Shows USDC/WP ratios sorted from cheapest to most expensive.
 
----
+Adjust listings.config.js until satisfied.
 
-## ✅ Current state
+Sign orders (seller)
+npx hardhat run --network sepolia scripts/seller-list.js
 
-- Basic PoC ready.
-- Tests cover success and failure.
-- Ready to extend with more realistic fee logic or lifecycle checks.
+
+Seller approves Seaport to move their ERC1155.
+
+Signs each order and saves them in data/orders.sepolia.json.
+
+Prints each signed order with its ratio.
+
+Generates a preview sorted by cheapest.
+
+Buyer: list and/or fulfill
+
+To list without fulfilling:
+
+npx hardhat run --network sepolia scripts/buyer-fulfill.js
+
+
+To fulfill one specific order :
+
+BUY_INDEX=1 npx hardhat run --network sepolia scripts/buyer-fulfill.js
+
+
+Example output:
+
+--- ORDERBOOK (cheapest USDC per WP first) ---
+
+![Buyer-Fulfilling-Order](./seaport-demo/docs/Buyer-Fulfilling-Order.png)
+
+
+This shows clearly how the buyer acquires all units of the selected tokenId.
+
+Notes
+
+The deployer and the seller of positions are the same address (from SELLER_PK).
+
+The buyer needs USDC to purchase → transfer from FUND_FROM_PK or mint from MockUSDC.
+
+Approvals (setApprovalForAll for ERC1155 and approve for USDC) are included in the scripts.
+
+This PoC focuses on technical Seaport + WPERC1155 integration. No frontend is included; the console and JSON files (listings.config.js, orders.sepolia.json) are the way to view the flow.

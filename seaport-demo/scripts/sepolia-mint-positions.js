@@ -1,0 +1,74 @@
+// scripts/sepolia-mint-positions.js
+const { ethers } = require("hardhat");
+
+async function main() {
+  const WP_ADDR = process.env.WP_ADDR;
+  if (!WP_ADDR) throw new Error("Missing WP_ADDR in .env");
+
+  const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
+  const seller = new ethers.Wallet(process.env.SELLER_PK, provider);
+  
+  async function waitNextBlock(pvd) {
+  const start = await pvd.getBlockNumber();
+  while ((await pvd.getBlockNumber()) === start) {
+    await new Promise(r => setTimeout(r, 1200)); // ~1.2s poll
+  }
+}
+
+  // ABI mínimo que necesitamos del WP
+  const wpAbi = [
+  // actions que llamas
+  "function mintCommit(address to, uint256 vmId, uint8 outcomeIndex, uint256 amount) external",
+  "function vmOutcomeTimeslotIdOf(uint256 vmId, uint8 outcomeIndex, uint256 timeslot) pure returns (uint256)",
+  "function betaOf(uint256 vmId, uint256 t) view returns (uint256)",
+  "function setVmConfig(uint256 vmId, uint32 tOpen, uint32 tClose, uint256 betaOpen_e18, bool tradable, uint8 nOutcomes) external",
+  "function setVmOutcomeTitles(uint256 vmId, string[] calldata titles) external",
+  // getters auto-generados por tu contrato:
+  // mapping(uint256 => VmConfig) public vmCfg;
+  // struct VmConfig { uint32 tOpen; uint32 tClose; uint256 betaOpen_e18; bool tradable; }
+  "function vmCfg(uint256 vmId) view returns (uint32 tOpen, uint32 tClose, uint256 betaOpen_e18, bool tradable)",
+  // mapping(uint256 => uint8) public vmOutcomeCount;
+  "function vmOutcomeCount(uint256 vmId) view returns (uint8)"
+];
+
+  const wp = new ethers.Contract(WP_ADDR, wpAbi, seller);
+
+  console.log("Minting commits (5 posiciones)…");
+  const amounts = [100n, 90n, 60n, 50n, 45n];
+  const vmId = 1n << 40n;      // mismo vmId que usaste en el deploy
+  const outcomeIndex = 1;       // el que quieras (0/1 si binario)
+
+  const minted = [];
+
+  for (let i = 0; i < amounts.length; i++) {
+  try {
+   
+   if (i > 0) await waitNextBlock(seller.provider);
+
+    const tx = await wp.mintCommit(seller.address, vmId, outcomeIndex, amounts[i]);
+    const rcpt = await tx.wait();
+
+    // block real
+    const blk = await provider.getBlock(rcpt.blockNumber);
+    const timeslot = BigInt(blk.timestamp);
+
+    // tokenId exacto
+    const tokenId = await wp.vmOutcomeTimeslotIdOf(vmId, outcomeIndex, timeslot);
+    const beta_e18 = await wp.betaOf(vmId, timeslot);
+
+    minted.push({ tokenId: tokenId.toString(), amount: amounts[i].toString(), timeslot: timeslot.toString(), beta: ethers.formatUnits(beta_e18, 18)});
+
+    console.log(`  #${i+1} tokenId=${tokenId} amount=${amounts[i]} timeslot=${timeslot} beta=${ethers.formatUnits(beta_e18, 18)}`);
+
+  } catch (e) {
+    console.error(`Mint #${i+1} failed:`, e.shortMessage ?? e.message);
+    if (e.receipt) console.error("receipt:", e.receipt);
+    throw e; // para parar y ver el fallo
+  }
+
+}
+  console.log("\nMinted summary:", minted);
+  console.log("\nListo. Ahora podrás escanear holdings y preparar las órdenes.");
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

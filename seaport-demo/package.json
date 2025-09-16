@@ -1,0 +1,15 @@
+{
+  "name": "seaport-demo",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:sepolia": "hardhat run --network sepolia scripts/deploy-sepolia.js"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^17.2.2",
+    "hardhat": "^2.22.10"
+  }
+} 
