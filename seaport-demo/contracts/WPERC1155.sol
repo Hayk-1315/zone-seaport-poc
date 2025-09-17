@@ -36,11 +36,11 @@ contract WPERC1155 is ERC1155, Ownable {
     mapping(uint256 => string[]) public vmOutcomeTitles; // vmId => outcome titles
 
 
-    // Empty URI (we don't need metadata for this PoC). We can set a real URI later if you want.
+    // Empty URI (we don't need metadata for this PoC). We can set a real URI later if we want.
     constructor() ERC1155("") {}
 
     function isValidVmId(uint256 vmId) public pure returns (bool) {
-        // lower 5 bytes must be zero to be a valid VM id (same convention as core)
+        // lower 5 bytes must be zero to be a valid VM id (same convention as core contract)
         return vmId & 0xff_ff_ff_ff_ff == 0;
     }
 

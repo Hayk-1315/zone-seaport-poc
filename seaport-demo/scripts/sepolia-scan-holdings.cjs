@@ -17,13 +17,13 @@ async function main() {
   ];
   const wp = new ethers.Contract(WP_ADDR, wpAbi, provider);
 
-  // Escanear TransferSingle hacia y desde seller
+  // Scan TransferSingle to and from seller
   const filter = wp.filters.TransferSingle(null, null, null);
   
   // --- chunked scan to respect Alchemy Free 10-block limit ---
   
   const latest = await provider.getBlockNumber();
-  let from = 9208445; // o el bloque de deploy si lo conoces para acelerar
+  let from = 9208445; // the deploy block
   maxRange = 8;
   let logs = [];
   while (from <= latest) {
@@ -32,9 +32,8 @@ async function main() {
   logs = logs.concat(chunk);
   from = to + 1;
 }
-// -----------------------------------------
 
-  // Calcular balances por tokenId del seller (muy simple: contamos entradas - salidas)
+ // Calculate balances per tokenId of seller (count ins - outs)
   const zero = "0x0000000000000000000000000000000000000000".toLowerCase();
   const addr = seller.address.toLowerCase();
   const balances = new Map();
@@ -52,7 +51,7 @@ async function main() {
     }
   }
 
-  // Guardar sólo los tokenIds con balance > 0
+  // Store only the tokenIds with balance > 0
   const owned = [...balances.entries()]
     .filter(([, bal]) => bal > 0n)
     .map(([tokenId, bal]) => ({ tokenId, balance: bal.toString() }));
@@ -60,11 +59,11 @@ async function main() {
   console.log("\nTokenIds owned by SELLER:");
   console.table(owned);
 
-  // Generar un config base para listings (askUSDC_6dec a rellenar)
+  // Generate a base config for listings (askUSDC_6dec to edit later)
   const baseCfg = owned.map(({ tokenId, balance }) => ({
     tokenId,
-    amount: balance,       // por defecto vende todo
-    askUSDC_6dec: "10000000" // placeholder: 10.000000 USDC, luego lo editas
+    amount: balance,       // sell all
+    askUSDC_6dec: "10000000" // placeholder: 10.000000 USDC. We have to edit this and put random number in "../data/listings.config.js"
   }));
 
   const outPath = path.join(__dirname, "../data/listings.config.js");

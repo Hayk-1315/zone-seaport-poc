@@ -9,19 +9,20 @@ const { ethers } = require("hardhat");
 const { initSeaport } = require("./utils/seaport");
 
 const USDC_ADDR     = process.env.USDC_ADDR;
-const SEAPORT_ADDR  = process.env.SEPOLIA_SEAPORT || process.env.SEAPORT_ADDR; // el que tengas en .env
-const FUND_FROM_PK  = process.env.FUND_FROM_PK; // opcional: cuenta con USDC para fondear al buyer
+const SEAPORT_ADDR  = process.env.SEPOLIA_SEAPORT || process.env.SEAPORT_ADDR; // the one we have in .env
+const FUND_FROM_PK  = process.env.FUND_FROM_PK; // optional: account with USDC to fund the buyer
 
 function loadOrders() {
   const p = path.join(__dirname, "..", "data", "orders.sepolia.json");
   return JSON.parse(fs.readFileSync(p, "utf8"));
 }
 
-// helper: convierte entero 6 dec a número humano
+// convert 6-decimal integer to human-readable number
 function humanUSDC(ask6) {
   return Number(BigInt(ask6)) / 1e6;
 }
-// helper: formatea pricePerWP_1e6 a humano
+
+// format pricePerWP_1e6 to human-readable
 function humanPricePerWP(pperWP_1e6) {
   return Number(ethers.formatUnits(pperWP_1e6.toString(), 6));
 }
@@ -42,7 +43,7 @@ async function ensureBuyerHasUSDC(buyer, minNeeded_6) {
   const funder = new ethers.Wallet(FUND_FROM_PK, ethers.provider);
   const usdcAsFunder = new ethers.Contract(USDC_ADDR, erc20, funder);
 
-  const topUp = minNeeded_6 - bal; // transfiere justo lo que falta
+  const topUp = minNeeded_6 - bal; // transfer exactly what is missing
   const tx = await usdcAsFunder.transfer(buyer.address, topUp);
   await tx.wait();
   const newBal = await usdcAsBuyer.balanceOf(buyer.address);
@@ -57,14 +58,14 @@ async function main() {
   const buyer = new ethers.Wallet(process.env.BUYER_PK, ethers.provider);
   const { seaport } = await initSeaport(buyer);
 
-  // 1) Cargar y ordenar por ratio (más barato primero)
+  // Load and sort by ratio (cheapest first)
   const orders = loadOrders();
   if (!orders.length) {
     console.log("No orders found in data/orders.sepolia.json");
     return;
   }
 
-  // Aseguramos que existe meta.pricePerWP_1e6 (formato nuevo)
+  // Ensure that meta.pricePerWP_1e6 exists (new format)
   const book = orders
     .map((o, i) => ({ ...o, _idx: i }))
     .sort((a, b) => {
@@ -84,7 +85,7 @@ async function main() {
 );
   });
 
-  // 2) Elegir índice por env
+  // Choose index by env
   const BUY_INDEX = process.env.BUY_INDEX;
   if (BUY_INDEX === undefined) {
     console.log("\nListing only. Set BUY_INDEX env var to fulfill one:");
@@ -98,18 +99,18 @@ async function main() {
     process.exit(1);
   }
 
-  // 3) (Opcional) Fondear buyer si no tiene USDC suficiente
+  // Fund buyer if they don't have enough USDC
   const ask6 = BigInt(chosen.meta.askUSDC_6dec);
   await ensureBuyerHasUSDC(buyer, ask6);
 
-  // 4) Approval del buyer → Seaport (sin conduit; usamos conduitKey=0x0)
+  // Buyer approval → Seaport (no conduit, using conduitKey=0x0)
   const erc20 = new ethers.Interface([
     "function approve(address spender, uint256 amount) returns (bool)",
     "function allowance(address owner,address spender) view returns (uint256)"
   ]);
   const usdc = new ethers.Contract(USDC_ADDR, erc20, buyer);
 
-  // Si ya hay allowance suficiente, no reaprobamos.
+  // If allowance is already enough, we don’t re-approve
   const allowance = await usdc.allowance(buyer.address, SEAPORT_ADDR);
   if (allowance < ask6) {
     const txA = await usdc.approve(SEAPORT_ADDR, ethers.MaxUint256);
@@ -119,7 +120,7 @@ async function main() {
     console.log(`approve skipped (allowance already sufficient) ✅`);
   }
 
-  // 5) Fulfill
+  // Fulfill
 console.log(
   `\nFulfilling order #${idx} (WP=${chosen.meta.wp_units}, ` +
   `p/WP≈${chosen.meta.human.pricePerWP.toFixed(6)}) …`
@@ -134,7 +135,7 @@ console.log(
   const rc = await tx.wait();
   console.log("Fulfilled ✅ Block:", rc.blockNumber);
 
-  // --- Show balances after fulfill ---
+  // Show balances after fulfill
   const wpAbi = [
     "function balanceOf(address account, uint256 id) view returns (uint256)"
   ];

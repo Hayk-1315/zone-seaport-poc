@@ -3,8 +3,8 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const { ethers } = require("hardhat");
-const { initSeaport } = require("./utils/seaport");
-const { pricePerWP_1e6, getWpForToken, humanUSDC, humanPricePerWP } = require("./utils/wp");
+const { initSeaport } = require("./utils/seaport.js");
+const { pricePerWP_1e6, getWpForToken, humanUSDC, humanPricePerWP } = require("./utils/wp.js");
 const listingsConfig = require("../data/listings.config.js");
 
 const WP_ADDR         = process.env.WP_ADDR;
@@ -29,8 +29,8 @@ async function main() {
   const seller = new ethers.Wallet(process.env.SELLER_PK, ethers.provider);
   const { seaport, ItemType } = await initSeaport(seller);
 
-  // ------- Approvals coherentes con conduitKey = 0x0 (direct) -------
-  // Direct route => operador = contrato Seaport
+  // Approvals consistent with conduitKey = 0x0 (direct)
+  // Direct route => operator = Seaport contract
   const i1155 = new ethers.Interface([
     "function setApprovalForAll(address operator, bool approved)"
   ]);
@@ -40,22 +40,21 @@ async function main() {
   console.log(`setApprovalForAll(ERC1155 -> ${SEAPORT_ADDRESS}) ✅`);
 
 
-  const rowsForPreview = []; // opcional, para ver ordenado
-  const orders = [];
+  const rowsForPreview = []; // optional: to view them sorted by price/WP
 
   for (const raw of listingsConfig) {
     const tokenId = raw.tokenId?.toString();
     const amount  = raw.amount?.toString();
     if (!tokenId || !amount || raw.askUSDC_6dec == null) continue;
 
-    // normaliza USDC 6d
+    // normalize USDC 6d
     const ask6 = parseUSDC6(raw.askUSDC_6dec).toString();
 
-    // Métricas (solo logging)
+    // Metrics (logging only)
     const wpUnits = await getWpForToken(WP_ADDR, tokenId, amount);
     const pperWP      = pricePerWP_1e6(ask6, wpUnits);
 
-    // (opcional) acumular para ordenar y mostrar
+     // accumulate to sort and display
     rowsForPreview.push({
     tokenId,
     amount,
@@ -72,7 +71,7 @@ async function main() {
       startTime: start.toString(),
       endTime: end.toString(),
       zone: ethers.ZeroAddress,
-      conduitKey: "0x" + "00".repeat(32), // DIRECT (sin conduit)
+      conduitKey: "0x" + "00".repeat(32), // DIRECT (withoutconduit)
       offer: [
         { itemType: ItemType.ERC1155, token: WP_ADDR, identifier: tokenId, amount: amount },
       ],
@@ -106,8 +105,7 @@ async function main() {
     );
   }
 
-  // (opcional) mostrar preview ordenado por barato
-// (opcional) mostrar preview ordenado por barato
+  // Optional: Show preview ordered, cheapest first
 rowsForPreview.sort((a, b) => {
   const ax = BigInt(a.pperWP_1e6);
   const bx = BigInt(b.pperWP_1e6);

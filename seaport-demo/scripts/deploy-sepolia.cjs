@@ -7,25 +7,25 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deployer:", deployer.address);
 
-  // 1) Deploy WPERC1155 (constructor sin args si tu contrato actual no los pide)
+  // Deploy WPERC1155
   const WP = await ethers.getContractFactory("WPERC1155");
   const wp = await WP.deploy();
   await wp.waitForDeployment();
   const wpAddress = await wp.getAddress();
   console.log("WPERC1155 deployed at:", wpAddress);
 
-  // 2) (Opcional) Deploy MockUSDC – útil para pruebas en Sepolia
+  // Deploy MockUSDC
   const USDC = await ethers.getContractFactory("MockUSDC");
   const usdc = await USDC.deploy();
   await usdc.waitForDeployment();
   const usdcAddress = await usdc.getAddress();
   console.log("MockUSDC deployed at:", usdcAddress);
 
-  // 3) Config mínima de un VM de prueba (ajusta si tu WPERC1155 requiere otros args)
-  // vmId con 5 bytes bajos a 0 (1 << 40)
+  ///  Minimal config of a test VM
+  // vmId with 5 lower bytes set to 0 (1 << 40):
   const vmId = 1n << 40n;
 
-  // tiempos: abre en ~1 min y cierra en ~15 min
+  // Times:
   const now = (await ethers.provider.getBlock("latest")).timestamp;
   const tOpen  = BigInt(now + 60);
   const tClose = tOpen + 535000n; 
@@ -36,12 +36,11 @@ async function main() {
   const tradable = true;
   const nOutcomes = 2;
 
-  // OJO: usa la firma real de tu setVmConfig
-  // Si tu contrato espera (vmId, tOpen, tClose, betaOpen_e18, tradable, nOutcomes):
+  
   const tx1 = await wp.setVmConfig(vmId, tOpen, tClose, betaOpen_e18, tradable, nOutcomes);
   await tx1.wait();
 
-  // (Si tienes setVmOutcomeTitles) – opcional
+ 
   try {
     const tx2 = await wp.setVmOutcomeTitles(vmId, ["Home", "Away"]);
     await tx2.wait();
@@ -49,7 +48,7 @@ async function main() {
     console.log("setVmOutcomeTitles not available or failed (ok for minimal PoC).");
   }
 
-  // 4) Guardar addresses para usarlos luego
+  // Store addresses to use them later
   const out = {
     network: "sepolia",
     deployer: deployer.address,
