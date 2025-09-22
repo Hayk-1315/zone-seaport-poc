@@ -67,8 +67,8 @@ async function main() {
   }
 
   console.log(
-    "\nTip: ajusta askUSDC_6dec en data/listings.config.js hasta que los ratios queden como quieres.\n" +
-    "Luego firma con seller-list.js y el buyer podrá elegir el más barato con BUY_INDEX.\n"
+    "\nAjustamos askUSDC_6dec en data/listings.config.js hasta que los ratios queden como quieramos.\n" +
+    "Luego firmamos con seller-list.js y el buyer podrá elegir el más barato con BUY_INDEX.\n"
   );
 }
 

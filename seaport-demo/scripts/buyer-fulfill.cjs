@@ -51,8 +51,8 @@ async function ensureBuyerHasUSDC(buyer, minNeeded_6) {
 }
 
 async function main() {
-  if (!USDC_ADDR || !SEAPORT_ADDR) {
-    throw new Error("Faltan env: USDC_ADDR y/o SEAPORT_ADDR (o SEPOLIA_SEAPORT).");
+  if (!USDC_ADDR || !SEAPORT_ADDR || !process.env.WP_ADDR) {
+    throw new Error("Faltan env: USDC_ADDR y/o SEAPORT_ADDR y/o WP_ADDR.");
   }
 
   const buyer = new ethers.Wallet(process.env.BUYER_PK, ethers.provider);
@@ -78,9 +78,12 @@ async function main() {
 
   console.log("\n--- ORDERBOOK (cheapest USDC per WP first) ---");
   book.forEach(o => {
+   const wpHuman = o.meta.wp_units_1e6
+  ? (Number(o.meta.wp_units_1e6) / 1e6).toFixed(6)
+  : o.meta.wp_units;
     console.log(
   `#${o._idx} seller=${o.meta.seller.slice(0,6)}… tokenId=${o.meta.tokenId} ` +
-  `amount=${o.meta.amount} WP=${o.meta.wp_units} askUSDC=${o.meta.human.askUSDC} ` +
+  `amount=${o.meta.amount} WP=${wpHuman} askUSDC=${o.meta.human.askUSDC} ` +
   `p/WP≈${o.meta.human.pricePerWP.toFixed(6)}`
 );
   });
@@ -94,14 +97,66 @@ async function main() {
   }
   const idx = Number(BUY_INDEX);
   const chosen = book.find(o => o._idx === idx);
+
   if (!chosen) {
     console.log("Invalid BUY_INDEX.");
     process.exit(1);
   }
 
+  // PRECHECK ORDER SHAPE. Validate that the order buyer is about to buy fits our policy and our target (contract, tokenId, amount, USDC)
+  const p = chosen.order.parameters;
+  const off0 = p.offer?.[0];
+  const con0 = p.consideration?.[0];
+  if (!off0 || !con0) throw new Error("Malformed order (missing offer/consideration)");
+
+  if (off0.itemType !== 3 || off0.token.toLowerCase() !== process.env.WP_ADDR.toLowerCase()) {
+  throw new Error("Offer must be ERC1155 from our WP contract");
+  }
+  if (off0.identifierOrCriteria !== chosen.meta.tokenId) {
+  throw new Error("Offer tokenId mismatch with metadata");
+  }
+  if (BigInt(off0.startAmount) !== BigInt(chosen.meta.amount) ||
+    BigInt(off0.endAmount)   !== BigInt(chosen.meta.amount)) {
+  throw new Error("Offer amount mismatch with metadata");
+  }
+
+  if (con0.itemType !== 1 || con0.token.toLowerCase() !== USDC_ADDR.toLowerCase()) {
+  throw new Error("Consideration must be USDC (ERC20)");
+  }
+  if (BigInt(con0.startAmount) !== BigInt(chosen.meta.askUSDC_6dec) ||
+    BigInt(con0.endAmount)   !== BigInt(chosen.meta.askUSDC_6dec)) {
+  throw new Error("Consideration amount mismatch (USDC)");
+}
+
   // Fund buyer if they don't have enough USDC
   const ask6 = BigInt(chosen.meta.askUSDC_6dec);
+
+  // PRICE GUARD. Protect the buyer: We don’t execute if the USDC/WP goes above the price limit set in env (optional)
+  if (process.env.MAX_PRICE_PER_WP_1e6) {
+  const maxP = BigInt(process.env.MAX_PRICE_PER_WP_1e6);
+  const pperWP = BigInt(chosen.meta.pricePerWP_1e6);
+  if (pperWP > maxP) {
+    throw new Error(`PricePerWP ${pperWP} > max ${maxP} (abort)`);
+  }
+  }
+
   await ensureBuyerHasUSDC(buyer, ask6);
+
+  // LIVE CHECKS SELLER: balance and approval. Make sure the seller still has enough balance and has not revoked Seaport approval (setApprovalForAll)
+ const i1155View = new ethers.Interface([
+  "function balanceOf(address account, uint256 id) view returns (uint256)",
+  "function isApprovedForAll(address account, address operator) view returns (bool)"
+ ]);
+ const wpRead = new ethers.Contract(process.env.WP_ADDR, i1155View, buyer.provider);
+
+const balSellerNow = await wpRead.balanceOf(chosen.meta.seller, chosen.meta.tokenId);
+if (balSellerNow < BigInt(chosen.meta.amount)) {
+  throw new Error("Seller no longer owns enough balance for this tokenId");
+}
+const approved = await wpRead.isApprovedForAll(chosen.meta.seller, SEAPORT_ADDR);
+if (!approved) throw new Error("Seller revoked approval to Seaport (cannot fulfill)");
+
+
 
   // Buyer approval → Seaport (no conduit, using conduitKey=0x0)
   const erc20 = new ethers.Interface([
@@ -121,10 +176,15 @@ async function main() {
   }
 
   // Fulfill
-console.log(
-  `\nFulfilling order #${idx} (WP=${chosen.meta.wp_units}, ` +
+  const wpHumanChosen = chosen.meta.wp_units_1e6
+  ? (Number(chosen.meta.wp_units_1e6) / 1e6).toFixed(6)
+  : chosen.meta.wp_units;
+
+  console.log(
+  `\nFulfilling order #${idx} (WP=${wpHumanChosen}, ` +
   `p/WP≈${chosen.meta.human.pricePerWP.toFixed(6)}) …`
-);
+  );
+
   const { executeAllActions: fulfill } = await seaport.fulfillOrder({
     order: chosen.order,
     accountAddress: buyer.address,

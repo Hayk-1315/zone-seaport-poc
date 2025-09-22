@@ -68,7 +68,7 @@ async function main() {
 
 }
   console.log("\nMinted summary:", minted);
-  console.log("\nListo. Ahora podrás escanear holdings y preparar las órdenes.");
+  console.log("\nReady. Now we can scan holdings and prepare the orders.");
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

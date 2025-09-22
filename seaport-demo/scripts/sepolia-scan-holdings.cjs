@@ -23,7 +23,7 @@ async function main() {
   // --- chunked scan to respect Alchemy Free 10-block limit ---
   
   const latest = await provider.getBlockNumber();
-  let from = 9208445; // the deploy block
+  let from = 9250756; // the deploy block
   maxRange = 8;
   let logs = [];
   while (from <= latest) {
@@ -70,8 +70,7 @@ async function main() {
   const js = `module.exports = ${JSON.stringify(baseCfg, null, 2)};\n`;
   fs.writeFileSync(outPath, js);
 
-  console.log(`\nWrote ${outPath} – edita askUSDC_6dec para tus ratios.\n`);
-  console.log("Tip: si tu WP tiene wpOfTokenId(tokenId, amount), puedes calcular WP y p/WP en un script aparte para decidir precios.");
+  console.log(`\nWrote ${outPath} – edit askUSDC_6dec - random numbers.\n`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

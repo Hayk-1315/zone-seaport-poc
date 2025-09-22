@@ -28,7 +28,7 @@ async function main() {
   // Times:
   const now = (await ethers.provider.getBlock("latest")).timestamp;
   const tOpen  = BigInt(now + 60);
-  const tClose = tOpen + 535000n; 
+  const tClose = tOpen + 735000n; // ~8.5 days
 
 
   // betaOpen = 2.0 (escala 1e18)

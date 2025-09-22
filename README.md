@@ -34,7 +34,7 @@ SEAPORT_ADDR=0x00000000000000ADc04C56Bf30aC9d3c0aAF14dC  # official contract on 
 
 
 ```bash 
-npx hardhat run --network sepolia scripts/deploy-sepolia.js
+npx hardhat run --network sepolia scripts/deploy-sepolia.cjs
 ```
 
 - Deploys WPERC1155 and MockUSDC.
@@ -44,7 +44,7 @@ npx hardhat run --network sepolia scripts/deploy-sepolia.js
 ### Mint positions (seller)
 
 ```bash 
-npx hardhat run --network sepolia scripts/sepolia-mint-positions.js
+npx hardhat run --network sepolia scripts/sepolia-mint-positions.cjs
 ```
 
 - Mints multiple positions with different timeslot.
@@ -53,7 +53,7 @@ npx hardhat run --network sepolia scripts/sepolia-mint-positions.js
 ### Scan holdings
 
 ```bash 
-npx hardhat run --network sepolia scripts/sepolia-scan-holdings.js
+npx hardhat run --network sepolia scripts/sepolia-scan-holdings.cjs
 ```
 
 - Detects seller balances.
@@ -67,7 +67,7 @@ npx hardhat run --network sepolia scripts/sepolia-scan-holdings.js
 ### Preview ratios
 
 ```bash
-npx hardhat run --network sepolia scripts/preview-ratios.js
+npx hardhat run --network sepolia scripts/preview-ratios.cjs
 ```
 
 - Computes WP on-chain for each position.
@@ -77,7 +77,7 @@ npx hardhat run --network sepolia scripts/preview-ratios.js
 ### Sign orders (seller)
 
 ```bash
-npx hardhat run --network sepolia scripts/seller-list.js
+npx hardhat run --network sepolia scripts/seller-list.cjs
 ```
 
 - Seller approves Seaport to move their ERC1155.
@@ -90,13 +90,13 @@ npx hardhat run --network sepolia scripts/seller-list.js
 **To list without fulfilling:**
 
 ```bash
-npx hardhat run --network sepolia scripts/buyer-fulfill.js
+npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
 ```
 
 **To fulfill one specific order (e.g. the cheapest):**
 
 ```bash
-BUY_INDEX=0 npx hardhat run --network sepolia scripts/buyer-fulfill.js
+BUY_INDEX=0 npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
 ```
 
 ## Example output:
@@ -112,7 +112,8 @@ This shows clearly how the buyer acquires all units of the selected tokenId.
 ## Notes
 
 - The deployer and the seller of positions are the same address (from SELLER_PK).
-- The buyer needs USDC to purchase → transfer from FUND_FROM_PK or mint from MockUSDC.
+- The buyer needs USDC to purchase. Transfer from FUND_FROM_PK or mint from MockUSDC.
+- Business logic validations are off-chain.
 - Approvals (setApprovalForAll for ERC1155 and approve for USDC) are included in the scripts.
 - This PoC focuses on technical Seaport + WPERC1155 integration. No frontend is included; the console and JSON files (listings.config.js, orders.sepolia.json) are the way to view the flow.
 
