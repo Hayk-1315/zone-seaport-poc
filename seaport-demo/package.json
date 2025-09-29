@@ -5,11 +5,15 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
-    "deploy:sepolia": "hardhat run --network sepolia scripts/deploy-sepolia.js"
+    "deploy:sepolia": "hardhat run --network sepolia scripts/deploy-sepolia.js",
+    "matcher:sepolia": "hardhat run scripts/matcher-run.cjs --network sepolia"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "dotenv": "^17.2.2",
     "hardhat": "^2.22.10"
+  },
+  "dependencies": {
+    "minimist": "^1.2.8"
   }
-} 
+}

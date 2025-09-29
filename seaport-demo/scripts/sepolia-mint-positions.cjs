@@ -8,11 +8,12 @@ async function main() {
   const provider = new ethers.JsonRpcProvider(process.env.SEPOLIA_RPC_URL);
   const seller = new ethers.Wallet(process.env.SELLER_PK, provider);
   
-  async function waitNextBlock(pvd) {
-  const start = await pvd.getBlockNumber();
-  while ((await pvd.getBlockNumber()) === start) {
-    await new Promise(r => setTimeout(r, 1200)); // ~1.2s poll
-  }
+  
+async function waitNextBlock(pvd) { 
+  const start = await pvd.getBlockNumber(); 
+while ((await pvd.getBlockNumber()) === start) {
+  await new Promise(r => setTimeout(r, 1200)); // ~1.2s poll 
+  } 
 }
 
   // Minimal ABI we need from WP
@@ -33,17 +34,19 @@ async function main() {
 
   const wp = new ethers.Contract(WP_ADDR, wpAbi, seller);
 
-  console.log("Minting commits (5 posiciones)…");
-  const amounts = [100n, 90n, 60n, 50n, 45n];
+  console.log("Minting commits (4 posiciones)…");
+  const amounts = [100n, 100n, 100n, 100n,];
   const vmId = 1n << 40n;      // the vmId used in the deploy
   const outcomeIndex = 1;       // whatever we want
 
   const minted = [];
 
+
   for (let i = 0; i < amounts.length; i++) {
   try {
    
-   if (i > 0) await waitNextBlock(seller.provider);
+   // if (i > 0) await waitNextBlock(seller.provider);
+    if (i > 0) await waitNextBlock(seller.provider);
 
     const tx = await wp.mintCommit(seller.address, vmId, outcomeIndex, amounts[i]);
     const rcpt = await tx.wait();

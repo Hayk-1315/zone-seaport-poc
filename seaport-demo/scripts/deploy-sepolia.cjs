@@ -42,7 +42,7 @@ async function main() {
 
  
   try {
-    const tx2 = await wp.setVmOutcomeTitles(vmId, ["Home", "Away"]);
+    const tx2 = await wp.setVmOutcomeTitles(vmId, ["Madrid", "Barça"]);
     await tx2.wait();
   } catch (e) {
     console.log("setVmOutcomeTitles not available or failed (ok for minimal PoC).");

@@ -23,7 +23,7 @@ async function main() {
   // --- chunked scan to respect Alchemy Free 10-block limit ---
   
   const latest = await provider.getBlockNumber();
-  let from = 9250756; // the deploy block
+  let from = 9302054; // the deploy block
   maxRange = 8;
   let logs = [];
   while (from <= latest) {

@@ -96,7 +96,7 @@ npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
 **To fulfill one specific order (e.g. the cheapest):**
 
 ```bash
-BUY_INDEX=0 npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
+BUY_INDEX=1 npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
 ```
 
 ## Example output:
@@ -116,6 +116,13 @@ This shows clearly how the buyer acquires all units of the selected tokenId.
 - Business logic validations are off-chain.
 - Approvals (setApprovalForAll for ERC1155 and approve for USDC) are included in the scripts.
 - This PoC focuses on technical Seaport + WPERC1155 integration. No frontend is included; the console and JSON files (listings.config.js, orders.sepolia.json) are the way to view the flow.
+
+## References
+
+- https://docs.opensea.io/docs/seaport-models?utm
+- https://github.com/ProjectOpenSea/seaport-js
+- https://docs.opensea.io/docs/seaport-interface?utm
+- https://sepolia.etherscan.io/address/0x00000000000000adc04c56bf30ac9d3c0aaf14dc?utm
 
 
 

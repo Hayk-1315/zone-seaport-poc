@@ -82,9 +82,6 @@ async function main() {
     continue;
   }
   }
-
-
-
      // accumulate to sort and display
     rowsForPreview.push({
     tokenId,
@@ -113,6 +110,7 @@ async function main() {
 
     const { executeAllActions } = await seaport.createOrder(orderParams, seller.address);
     const order = await executeAllActions();
+    
 
     // POST-BUILD CHECK: make sure the order you sign matches exactly what you intended (correct contracts and correct amounts)
    const p = order.parameters;
@@ -136,7 +134,6 @@ async function main() {
    if (con0.itemType !== 1 || con0.token.toLowerCase() !== USDC_ADDR.toLowerCase()) {
    throw new Error("Consideration must be ERC20 (USDC)");
    }
-
 
     orders.push({
       meta: {

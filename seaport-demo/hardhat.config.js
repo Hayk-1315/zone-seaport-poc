@@ -13,7 +13,7 @@ module.exports = {
   networks: {
     hardhat: {
       initialBaseFeePerGas: 0,
-      chainId: 31337, // usa el chainId local típico; no pongas 11155111 aquí
+      chainId: 31337, // usamos el chainId local típico; no ponemos 11155111 aquí
     },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "",

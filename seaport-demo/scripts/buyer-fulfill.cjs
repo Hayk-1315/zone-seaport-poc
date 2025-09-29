@@ -7,6 +7,27 @@ const fs = require("fs");
 const path = require("path");
 const { ethers } = require("hardhat");
 const { initSeaport } = require("./utils/seaport");
+// Use WP helpers to compute WP and pricePerWP when order comes from matcher
+const { getWpForToken, pricePerWP_1e6 } = require("./utils/wp");
+
+
+// --- BEGIN: accept --orderJsonPath for PoC automation ---
+// --- BEGIN: accept --orderJsonPath / --orderjsonpath for PoC automation ---
+let ORDER_FROM_JSON = null;
+try {
+  const args = require('minimist')(process.argv.slice(2));
+  const orderPath = args.orderJsonPath || args.orderjsonpath; // <-- alias en minúsculas
+  if (orderPath) {
+    const p = path.join(__dirname, '..', orderPath);
+    const payload = JSON.parse(fs.readFileSync(p, 'utf8'));
+    // Expect: { order: <seaportSignedOrder>, buyer: <address> }
+    ORDER_FROM_JSON = payload;
+    //console.log('📦 Loaded order from JSON path:', orderPath);
+  }
+} catch (e) {
+  console.warn('Could not parse orderJsonPath:', e.message);
+}
+// --- END ---
 
 const USDC_ADDR     = process.env.USDC_ADDR;
 const SEAPORT_ADDR  = process.env.SEPOLIA_SEAPORT || process.env.SEAPORT_ADDR; // the one we have in .env
@@ -58,6 +79,50 @@ async function main() {
   const buyer = new ethers.Wallet(process.env.BUYER_PK, ethers.provider);
   const { seaport } = await initSeaport(buyer);
 
+ // --- BEGIN: fast-path when matcher passes an order via --orderJsonPath ---
+let chosen; // we'll set this either from ORDER_FROM_JSON or from the orderbook path
+
+if (ORDER_FROM_JSON) {
+  // Build "chosen" from the raw Seaport order provided by the matcher
+  const order = ORDER_FROM_JSON.order;
+  const p = order.parameters;
+  const off0 = p.offer?.[0];
+  const con0 = p.consideration?.[0];
+
+  // Use the WP contract address from the seller's order, not from env
+const wpAddrFromOrder = off0.token;
+
+  if (!off0 || !con0) throw new Error("Malformed order from matcher.");
+
+  const tokenId = off0.identifierOrCriteria.toString();
+  const amount  = Number(off0.startAmount);
+  const ask6    = con0.startAmount.toString();
+  const seller  = p.offerer;
+
+  // Compute WP and p/WP (1e6 scale) to populate meta
+  const { wp1e6 } = await getWpForToken(wpAddrFromOrder, tokenId, amount);
+  const pperWP_1e6 = pricePerWP_1e6(ask6, wp1e6);
+
+  chosen = {
+    meta: {
+      seller,
+      tokenId,
+      amount,
+      askUSDC_6dec: ask6,
+      wp_units_1e6: wp1e6.toString(),
+      pricePerWP_1e6: pperWP_1e6.toString(),
+      human: {
+        askUSDC: humanUSDC(ask6),
+        pricePerWP: humanPricePerWP(pperWP_1e6),
+      }
+    },
+    order
+  };
+
+  // From here on, the script continues using "chosen" as usual.
+}
+// --- END: fast-path when matcher passes an order via --orderJsonPath ---
+  if (!ORDER_FROM_JSON) {
   // Load and sort by ratio (cheapest first)
   const orders = loadOrders();
   if (!orders.length) {
@@ -96,10 +161,10 @@ async function main() {
     return;
   }
   const idx = Number(BUY_INDEX);
-  const chosen = book.find(o => o._idx === idx);
-
+  chosen = book.find(o => o._idx === idx); // ← sin const, asigna al externo
+ } 
   if (!chosen) {
-    console.log("Invalid BUY_INDEX.");
+    console.log("No chosen order (either no BUY_INDEX or no matcher order).");
     process.exit(1);
   }
 
@@ -156,8 +221,6 @@ if (balSellerNow < BigInt(chosen.meta.amount)) {
 const approved = await wpRead.isApprovedForAll(chosen.meta.seller, SEAPORT_ADDR);
 if (!approved) throw new Error("Seller revoked approval to Seaport (cannot fulfill)");
 
-
-
   // Buyer approval → Seaport (no conduit, using conduitKey=0x0)
   const erc20 = new ethers.Interface([
     "function approve(address spender, uint256 amount) returns (bool)",
@@ -180,16 +243,18 @@ if (!approved) throw new Error("Seller revoked approval to Seaport (cannot fulfi
   ? (Number(chosen.meta.wp_units_1e6) / 1e6).toFixed(6)
   : chosen.meta.wp_units;
 
+  const idxLabel = ORDER_FROM_JSON ? 'matcher' : idx;
   console.log(
-  `\nFulfilling order #${idx} (WP=${wpHumanChosen}, ` +
+  `\nFulfilling order #${idxLabel} (WP=${wpHumanChosen}, ` +
   `p/WP≈${chosen.meta.human.pricePerWP.toFixed(6)}) …`
   );
+
 
   const { executeAllActions: fulfill } = await seaport.fulfillOrder({
     order: chosen.order,
     accountAddress: buyer.address,
   });
-
+   
   const tx = await fulfill();
   console.log("Tx sent:", tx.hash);
   const rc = await tx.wait();
