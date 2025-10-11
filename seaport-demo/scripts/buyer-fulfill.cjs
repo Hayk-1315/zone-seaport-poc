@@ -1,6 +1,11 @@
-// scripts/buyer-fulfill.js
-// Loads signed orders, sorts by cheapest USDC/WP, shows them, and fulfills one.
-// BUY_INDEX env-var to pick which one: BUY_INDEX=0 npx hardhat run --network sepolia scripts/buyer-fulfill.js
+// scripts/buyer-fulfill.cjs
+// Loads a signed seller order, calculates price ratios, and fulfills it on Seaport.
+// BUY_INDEX env-var to pick which one: BUY_INDEX=0 npx hardhat run --network sepolia scripts/buyer-fulfill.cjs
+//
+// This script is used in BOTH flows:
+//  - Manual mode: you run it directly after selecting an order.
+//  - Automated mode: matcher-run.cjs spawns this script automatically once a buyer intent and seller order match.
+
 
 require("dotenv").config();
 const fs = require("fs");
@@ -10,8 +15,6 @@ const { initSeaport } = require("./utils/seaport");
 // Use WP helpers to compute WP and pricePerWP when order comes from matcher
 const { getWpForToken, pricePerWP_1e6 } = require("./utils/wp");
 
-
-// --- BEGIN: accept --orderJsonPath for PoC automation ---
 // --- BEGIN: accept --orderJsonPath / --orderjsonpath for PoC automation ---
 let ORDER_FROM_JSON = null;
 try {

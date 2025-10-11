@@ -47,9 +47,34 @@ function saveJson(p, v) {
   fs.renameSync(tmp, p);
 }
 
+function updateIntentStatus(id, status, extra = {}) {
+  const all = loadJson(INTENTS_FILE);
+  const i = all.findIndex(x => x.id === id);
+  if (i >= 0) {
+    all[i] = { ...all[i], status, ...extra, updatedAt: nowIso() };
+    saveJson(INTENTS_FILE, all);
+  }
+}
+
+function deleteOrderById(orderId) {
+  const book = loadJson(ORDERS_BOOK_FILE);
+  const filtered = book.filter(e => {
+    const salt = e?.order?.parameters?.salt;
+    const sig  = e?.order?.signature;
+    const id = salt || sig || null;
+    return id !== orderId;
+  });
+  if (filtered.length !== book.length) {
+    saveJson(ORDERS_BOOK_FILE, filtered);
+  }
+}
+
+function getOrderIdFromOrder(order) {
+  return order?.parameters?.salt || order?.signature || null;
+}
 
 function nowIso() { return new Date().toISOString(); }
-function isExpired(iso) { return new Date(iso).getTime() <= Date.now(); }
+function isExpired(iso) { return new Date(iso).getTime() < Date.now(); }
 
 /** "0.6" -> 600000 (1e6) */
 function parseThreshold1e6(s) {
@@ -60,8 +85,9 @@ function parseThreshold1e6(s) {
 }
 
 /**
- * Normalize one orderbook entry (from orders.sepolia.json) into a compact shape
- * We prefer entry.meta.*, but can fall back to order.parameters if meta is missing.
+ * Normalize one orderbook entry...
+ * Preferimos meta para tokenId/amount/seller, PERO para el precio
+ * priorizamos SIEMPRE lo firmado (consideration[0].startAmount).
  */
 function normalizeOrderEntry(entry) {
   const order = entry?.order;
@@ -99,6 +125,13 @@ async function destructureTokenId(tokenId) {
   return { vmId, outcomeIndex };
 }
 
+function startPolling() {
+  if (_pollId) return;
+  _pollId = setInterval(() => {
+    tryMatchOnce().catch(err => console.error('Matcher error:', err));
+  }, 15000);
+}
+
 async function tryMatchOnce() {
   if (!WP_ADDR) {
     console.error('Missing WP_ADDR (WPERC1155 address) in environment.');
@@ -118,8 +151,22 @@ async function tryMatchOnce() {
   const candidatesRaw = ordersBook.map(normalizeOrderEntry).filter(Boolean);
   if (!candidatesRaw.length) return;
 
+    // Preparamos views una sola vez por ciclo
+  const i1155View = new ethers.Interface([
+    "function balanceOf(address account, uint256 id) view returns (uint256)",
+    "function isApprovedForAll(address account, address operator) view returns (bool)"
+  ]);
+  const wpView = new ethers.Contract(WP_ADDR, i1155View, ethers.provider);
+  const seaportAddr = process.env.SEPOLIA_SEAPORT || process.env.SEAPORT_ADDR;
+  if (!seaportAddr) {
+  console.warn("[matcher] WARN: Missing SEPOLIA_SEAPORT/SEAPORT_ADDR in env.");
+  return; // opcional: aborta este ciclo
+  }
+
   for (const intent of intents) {
     const thresh1e6 = parseThreshold1e6(intent.maxPricePerWP);
+    
+    let best = null; // { cand, pPerWP_1e6, wp1e6 }
 
     for (const cand of candidatesRaw) {
       // amount must be exactly 100 for the PoC (no partial fills)
@@ -137,53 +184,70 @@ async function tryMatchOnce() {
 
       const pPerWP_1e6 = pricePerWP_1e6(cand.askUSDC1e6, wp1e6);
 
-      if (pPerWP_1e6 <= BigInt(thresh1e6)) {
-        const humanPrice = humanPricePerWP(pPerWP_1e6);
-        const humanAsk   = humanUSDC(cand.askUSDC1e6);
+      if (pPerWP_1e6 > BigInt(thresh1e6)) continue;
 
         // --- PRECHECK: seller balance + approval (cheap reads) ---
-        const i1155View = new ethers.Interface([
-          "function balanceOf(address account, uint256 id) view returns (uint256)",
-          "function isApprovedForAll(address account, address operator) view returns (bool)"
-        ]);
-        const wpView = new ethers.Contract(WP_ADDR, i1155View, ethers.provider);
-        const balSellerNow = await wpView.balanceOf(cand.seller, cand.tokenId);
-        if (balSellerNow < BigInt(cand.amount)) {
-          // Opcional: marca un “cooldown” para no reintentar este matchRef unos minutos
-          continue;
+       const balSellerNow = await wpView.balanceOf(cand.seller, cand.tokenId);
+        // Normaliza a bigint tanto en v5 (BigNumber) como v6 (bigint)
+        const balBI = (typeof balSellerNow === 'bigint')
+        ? balSellerNow
+        : BigInt(balSellerNow.toString());
+        const amtBI = BigInt(cand.amount);
+        if (balBI < amtBI) {
+        // No tiene suficiente balance → descarta candidata
+        continue;
         }
-        const approved = await wpView.isApprovedForAll(cand.seller, process.env.SEPOLIA_SEAPORT || process.env.SEAPORT_ADDR);
+        const approved = await wpView.isApprovedForAll(cand.seller, seaportAddr);
         if (!approved) {
           // idem cooldown si quieres
           continue;
         }
         // --- END PRECHECK ---
+        
+        // Mantén el mejor (más barato p/WP)
+       if (!best || pPerWP_1e6 < best.pPerWP_1e6) {
+        best = { cand, pPerWP_1e6, wp1e6 };        
+       }
+        }
 
-        const wpHuman = Number(wp1e6) / 1e6;
+        if (best) {
+          const { cand, pPerWP_1e6, wp1e6 } = best;
+          const humanPrice = humanPricePerWP(pPerWP_1e6);
+          const humanAsk   = humanUSDC(cand.askUSDC1e6);
+          const wpHuman    = Number(wp1e6) / 1e6;
 
         console.log(
-          `🔎 Automatic MATCH → Between buyer intent with ID ${intent.id} and seller signed order with tokenId=${cand.tokenId} | ` +
+          `🔎 Automatic Best MATCH → Between buyer intent with ID ${intent.id} and seller signed order with tokenId=${cand.tokenId} | ` +
           `p/WP=${humanPrice} ≤ ${intent.maxPricePerWP} | askUSDC=${humanAsk} | WP≈${wpHuman.toFixed(6)}`
         );
         
-
-        // Pass matched order to buyer-fulfill via JSON
+         // Pass matched order to buyer-fulfill via JSON
         saveJson(TMP_MATCHED_ORDER, { order: cand.order, buyer: intent.buyer })
 
+        // ==== ARCHIVO HISTÓRICO POR MATCH ====
+        // Asegura carpeta
+        const histDir = path.join(__dirname, '..', 'data', 'matched-history');
+        if (!fs.existsSync(histDir)) fs.mkdirSync(histDir, { recursive: true });
+
+        // Timestamp legible y seguro para nombre de archivo
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        // Copia del puente a histórico
+        const histPath = path.join(histDir, `matched-${stamp}.json`);
+        fs.copyFileSync(TMP_MATCHED_ORDER, histPath);
+
+
+        updateIntentStatus(intent.id, "EXECUTING"); // opcional, para evitar reintentos
+
         // Spawn fulfill (project root = seaport-demo)
-    
         const { spawn } = require('child_process');
-
-
         const root = path.join(__dirname, '..');
-
         const isWin = process.platform === 'win32';
         const cmd   = isWin ? 'cmd' : 'node';
         const args  = isWin
           ? ['/c', 'node', '-r', 'hardhat/register', 'scripts\\buyer-fulfill.cjs',
-            '--orderjsonpath', 'data\\matched-order.json']
+            '--orderjsonpath', 'data\\matched-order.json', '--keep-orderjson']
           : ['-r', 'hardhat/register', 'scripts/buyer-fulfill.cjs',
-            '--orderjsonpath', 'data/matched-order.json'];
+            '--orderjsonpath', 'data/matched-order.json', '--keep-orderjson'];
 
         let child;
         try {
@@ -194,34 +258,36 @@ async function tryMatchOnce() {
             env: { ...process.env, HARDHAT_NETWORK: 'sepolia' }, // fija la red
           });
 
-          // One-shot: detenemos el polling, pero NO cerramos aún;
-          // saldremos cuando termine el hijo (para ver sus logs).
-          if (_pollId) {
-            clearInterval(_pollId);
-            _pollId = null;
-          }
+          // Pausa el polling hasta que termine el hijo. Justo antes del fulfill → PAUSA el polling. Para no buscar otro match mientras se está cumpliendo éste (evitar carreras y doble gasto).
+         if (_pollId) { clearInterval(_pollId); _pollId = null; }
           //console.log('⏸ Matcher one-shot: fulfill lanzado. Esperando a que termine el hijo…');
 
           child.on('exit', (code) => {
-            //console.log(`↪ buyer-fulfill salió con código ${code}`);
-            // cierra el matcher reflejando el estado del fulfill (0=ok, !=0=error)
-            process.exit(code || 0);
+          if (code === 0) {
+          const usedOrderId =  getOrderIdFromOrder(cand.order);
+          if (usedOrderId) deleteOrderById(usedOrderId);
+            // Éxito: NO volvemos a considerar este intent
+            updateIntentStatus(intent.id, "DONE");
+          } else {
+            // Fallo: si quieremos reintentar, devolvemos a ARMED
+            updateIntentStatus(intent.id, "ARMED", { lastErrorCode: code });
+          }
+          // try { fs.unlinkSync(TMP_MATCHED_ORDER); } catch (_) {}
+          startPolling(); // reanuda el polling
           });
 
-
         } catch (e) {
-           // (opcional) si ya no usas EXECUTING/ARMED, no toques intents.json aquí
+           // (opcional) si ya no usas EXECUTING/ARMED, no tocamos intents.json aquí
           console.error('❌ spawn failed:', e);
           return;
         }
       }
     }
   }
-}
 
 (async () => {
-  console.log('👀 Matcher started. Polling every 10s...');
-  _pollId = setInterval(() => {
-    tryMatchOnce().catch(err => console.error('Matcher error:', err));
-  }, 10000);
+  console.log('👀 Matcher started. Polling every 20s...');
+  startPolling();
 })();
+
+//npx hardhat run scripts/matcher-run.cjs --network sepolia

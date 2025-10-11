@@ -48,3 +48,5 @@ const ERC20_ABI = [
   await tx.wait();
   console.log('✅ Approved.');
 })();
+
+// npx hardhat run --network sepolia scripts/buyer-approve-usdc.cjs 

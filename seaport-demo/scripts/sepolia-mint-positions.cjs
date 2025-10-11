@@ -35,7 +35,7 @@ while ((await pvd.getBlockNumber()) === start) {
   const wp = new ethers.Contract(WP_ADDR, wpAbi, seller);
 
   console.log("Minting commits (4 posiciones)…");
-  const amounts = [100n, 100n, 100n, 100n,];
+  const amounts = [100n, 100n, 100n, 100n, 100n, 100n, 100n, 100n]; // mixed BigInt and Number to show both work
   const vmId = 1n << 40n;      // the vmId used in the deploy
   const outcomeIndex = 1;       // whatever we want
 

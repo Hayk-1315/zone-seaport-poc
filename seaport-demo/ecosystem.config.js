@@ -9,7 +9,7 @@ module.exports = {
       env: {
         HARDHAT_NETWORK: 'sepolia'
       },
-      autorestart: false, // ponemos false para evitar reinicios infinitos
+      autorestart: true, // ponemos false para evitar reinicios infinitos
       watch: false,
       time: true,
       merge_logs: true,
@@ -17,6 +17,7 @@ module.exports = {
     }
   ]
 }
+
 
 
 
